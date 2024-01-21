@@ -1,39 +1,41 @@
 pipeline {
-  agent { label 'linux' }
-  options {
-    buildDiscarder(logRotator(numToKeepStr: '5'))
-  }
-  environment {
-    HEROKU_API_KEY = credentials('darinpope-heroku-api-key')
-  }
-  parameters { 
-    string(name: 'APP_NAME', defaultValue: '', description: 'What is the Heroku app name?') 
-  }
+    agent any
 
-    stage('Login') {
-      steps {
-        sh 'echo $HEROKU_API_KEY | docker login --username=_ --password-stdin registry.heroku.com'
-      }
+    environment {
+        SONARQUBE_SCANNER_HOME = tool 'sonar-scanner'
     }
-    stage('Push to Heroku registry') {
-      steps {
-        sh '''
-          docker tag darinpope/java-web-app:latest registry.heroku.com/$APP_NAME/web
-          docker push registry.heroku.com/$APP_NAME/web
-        '''
-      }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                // Checkout source code from your version control system
+                checkout scm
+            }
+        }
+
+        stage('Build') {
+            steps {
+                // Build your project (Maven example)
+                sh 'mvn clean install'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    // Run SonarQube scanner
+                    withSonarQubeEnv(installationName 'sonarqube') {
+                        sh "${SONARQUBE_SCANNER_HOME}/bin/sonar-scanner"
+                    }
+                }
+            }
+        }
     }
-    stage('Release the image') {
-      steps {
-        sh '''
-          heroku container:release web --app=$APP_NAME
-        '''
-      }
+
+    post {
+        success {
+            // Additional steps on successful build
+            echo 'Build and SonarQube analysis completed successfully!'
+        }
     }
-  }
-  post {
-    always {
-      sh 'docker logout'
-    }
-  }
 }
